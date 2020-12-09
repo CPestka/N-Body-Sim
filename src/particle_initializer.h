@@ -13,7 +13,7 @@ struct InPutParticle {
   T m;
 };
 
-//these three functions apply rotation matrices to the 3D input vector
+//These three functions apply rotation matrices to the 3D input vector
 template<typename T>
 void RotateArroundX_Achis(T* vector, T angle){
   T tmp[3] = {0,0,0};
@@ -53,9 +53,9 @@ InPutParticle<T> BodyAtCenter(T mass=5.974e+24){
   return my_particle;
 }
 
-//assumes central-body_mass >> moon mass for calculation of velocity
-//default parameters are for THE moon in its real orbit, in the XY-plane with
-//phase = 0
+//Assumes central-body_mass >> moon mass for calculation of velocity.
+//Default parameters are for THE moon in its real orbit, in the XY-plane with
+//phase = 0.
 template<typename T>
 InPutParticle<T> CircularOrbitMoon(T orbital_phase_z = 0.0,
                                 T orbital_plane_angle_polar_y = 0.0,
@@ -69,9 +69,9 @@ InPutParticle<T> CircularOrbitMoon(T orbital_phase_z = 0.0,
   T v[3];
   T velocity = sqrt((G*central_body_mass)/orbital_radius);
 
-  //for the sake of simplicity the moon position and velocity is first set to
+  //For the sake of simplicity the moon position and velocity is first set to
   //one in the XY plane with phase = 0 and then subsequently rotated to fulfill
-  //the specified parameters for the orbital phase and the orbital plane angles
+  //the specified parameters for the orbital phase and the orbital plane angles.
   x[0] = orbital_radius;
   x[1] = 0;
   x[2] = 0;
@@ -84,19 +84,19 @@ InPutParticle<T> CircularOrbitMoon(T orbital_phase_z = 0.0,
   }
   v[2] = 0;
 
-  //adjusting moon parameter to specified orrbital_plane_angle_azimutal
+  //Adjusting moon parameter to specified orrbital_plane_angle_azimutal.
   if (orbital_plane_angle_azimutal_x != 0.0){
     RotateArroundX_Achis(x, orbital_plane_angle_azimutal_x);
     RotateArroundX_Achis(v, orbital_plane_angle_azimutal_x);
   }
 
-  //adjusting moon parameter to specified orrbital_plane_angle_polar
+  //Adjusting moon parameter to specified orrbital_plane_angle_polar.
   if (orbital_plane_angle_polar_y != 0.0){
     RotateArroundY_Achis(x, orbital_plane_angle_polar_y);
     RotateArroundY_Achis(v, orbital_plane_angle_polar_y);
   }
 
-  //adjusting moon parameter to specified orbital_phase_z_rot_z
+  //Adjusting moon parameter to specified orbital_phase_z_rot_z.
   if (orbital_phase_z != 0.0){
     RotateArroundZ_Achis(x, orbital_phase_z);
     RotateArroundZ_Achis(v, orbital_phase_z);
@@ -111,12 +111,12 @@ InPutParticle<T> CircularOrbitMoon(T orbital_phase_z = 0.0,
   return my_particle;
 }
 
-//like AddCircularOrbitMoon() but adds the possibility to add a deviation of the
-//position and velocity from an in-plane-circular orbit
-//typical input for the x_deviation vector would be a rondom vector that is
-//e.g normaly distributed + different orbital phases --> creates ring of moons
-//deviations of the velocity create elliptical orbits (for y_deviation[1])
-//otherwise rotate the orbital plane
+//Like CircularOrbitMoon() but adds the possibility to add a deviation of the
+//position and velocity from an in-plane-circular orbit.
+//A typical input for the x_deviation vector would be a rondom vector that is
+//e.g normaly distributed + different orbital phases --> creates ring of moons.
+//Deviations of the velocity create elliptical orbits (for y_deviation[1])
+//otherwise rotate the orbital plane.
 template<typename T>
 InPutParticle<T> NonCircularOrbitMoon(T* x_deviation,
                                    T* v_deviation,
@@ -132,9 +132,9 @@ InPutParticle<T> NonCircularOrbitMoon(T* x_deviation,
   T v[3];
   T velocity = sqrt((G*central_body_mass)/orbital_radius);
 
-  //for the sake of simplicity the moon position and velocity is first set to
+  //For the sake of simplicity the moon position and velocity is first set to
   //one in the XY plane with phase = 0 and then subsequently rotated to fulfill
-  //the specified parameters for the orbital phase and the orbital plane angles
+  //the specified parameters for the orbital phase and the orbital plane angles.
   x[0] = orbital_radius + x_deviation[0];
   x[1] = 0 + x_deviation[1];
   x[2] = 0 + x_deviation[2];
@@ -147,19 +147,19 @@ InPutParticle<T> NonCircularOrbitMoon(T* x_deviation,
   }
   v[2] = 0 + v_deviation[2];
 
-  //adjusting moon parameter to specified orrbital_plane_angle_azimutal
+  //Adjusting moon parameter to specified orrbital_plane_angle_azimutal.
   if (orbital_plane_angle_azimutal_x != 0.0){
     RotateArroundX_Achis(x, orbital_plane_angle_azimutal_x);
     RotateArroundX_Achis(v, orbital_plane_angle_azimutal_x);
   }
 
-  //adjusting moon parameter to specified orrbital_plane_angle_polar
+  //Adjusting moon parameter to specified orrbital_plane_angle_polar.
   if (orbital_plane_angle_polar_y != 0.0){
     RotateArroundY_Achis(x, orbital_plane_angle_polar_y);
     RotateArroundY_Achis(v, orbital_plane_angle_polar_y);
   }
 
-  //adjusting moon parameter to specified orbital_phase_z_rot_z
+  //Adjusting moon parameter to specified orbital_phase_z_rot_z.
   if (orbital_phase_z != 0.0){
     RotateArroundZ_Achis(x, orbital_phase_z);
     RotateArroundZ_Achis(v, orbital_phase_z);

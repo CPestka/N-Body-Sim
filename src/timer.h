@@ -1,7 +1,8 @@
 #pragma once
 #include <chrono>
+#include <cstdint>
 
-//scope based timer that prints to console at destruction
+//Scope based timer that prints to console at destruction
 class ScopeTimer{
  public:
   std::chrono::high_resolution_clock::time_point start;
@@ -57,33 +58,33 @@ public:
   }
 };
 
-//timer that doesnt print to console but instead returns the time intervalls as
-//doubles
+//Instantiate to set start time point, then call getTime..() to get the elapsed
+//time.
 class IntervallTimer{
  public:
   std::chrono::high_resolution_clock::time_point start;
-
+  IntervallTimer() : start(std::chrono::high_resolution_clock::now()) {};
   void PrintPeriod(){
     std::cout << std::chrono::high_resolution_clock::period::den << std::endl;
   }
 
-  double getTimeInMinutes(){
+  int64_t getTimeInMinutes(){
     return std::chrono::duration_cast<std::chrono::minutes>(
         std::chrono::high_resolution_clock::now() - this->start).count();
   }
-  double getTimeInSeconds(){
+  int64_t getTimeInSeconds(){
     return std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::high_resolution_clock::now() - this->start).count();
   }
-  double getTimeInMilliseconds(){
+  int64_t getTimeInMilliseconds(){
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - this->start).count();
   }
-  double getTimeInMicroeconds(){
+  int64_t getTimeInMicroseconds(){
     return std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now() - this->start).count();
   }
-  double getTimeInNanoseconds(){
+  int64_t getTimeInNanoseconds(){
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::high_resolution_clock::now() - this->start).count();
   }
