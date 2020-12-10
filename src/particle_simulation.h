@@ -175,7 +175,7 @@ public:
 
   //Used to initialize the data of "nonexisting" particles in last batch
   //This is needed for funtional correctness of simulation, if last batch isnt
-  //full!
+  //full and SimulateAVX2() is used!
   void SetMissingParticlesInBatch(){
     if (this->particle_set_counter < this->num_particles) {
       for(int i=(this->particle_set_counter % SIMD_float_t_width);
@@ -191,9 +191,10 @@ public:
     }
   }
 
-  //Performs the simulation on the cpu without vectorized instructions
-  //Is multithreaded for this->num_threads > 1
-  void SimulationCPU(){
+  //Executes the simulation on the set particles, given the parameters supplied
+  //during instantiation.
+  //Is multithreaded for num_particles > 1
+  void SimulateCPU(){
     IntervallTimer sim_timer;
     //Save initial particle data
     SaveCurrentStep();
@@ -222,6 +223,7 @@ public:
     MakeSmallStepAllThreads(true);
   }
 
+  //Handles the multithreaded execution of MakeSmallStepAVX2()
   void MakeSmallStepAllThreads(bool is_last_small_step){
     std::vector<std::thread> worker_threads;
     for(int i=0; i<(this->num_threads-1); i++){
@@ -242,7 +244,12 @@ public:
     this->particles_current_step.swap(this->particles_next_step);
   }
 
-
+  //Computes the acceleration on each particle that this thread is responsible
+  //for and computes from that the velocity and postion in the next step.
+  //The bool is_last_small_step makes sure the acceleration data is exported
+  //for the last small step within a big step.
+  //Uses AVX2 instructions -> Executing CPU must support these (alternative is
+  //SimulateCPU() or SimulateGPU())
   void MakeSmallStep(int thread_id, bool is_last_small_step){
     //Loop over the particles that "belong" to this thread
     for(int i=this->num_particles_before_this_thread[thread_id];
@@ -307,7 +314,12 @@ public:
     }
   }
 
-  void SimulationAVX2(){
+  //Executes the simulation on the set particles, given the parameters supplied
+  //during instantiation.
+  //Is multithreaded for num_particles > 1
+  //Uses AVX2 instructions -> Executing CPU must support these (alternative is
+  //SimulateCPU() or SimulateGPU())
+  void SimulateAVX2(){
     IntervallTimer sim_timer;
     //Initial particle data is saved
     SaveCurrentStepBatched();
@@ -327,6 +339,7 @@ public:
     this->total_execution_time = sim_timer.getTimeInSeconds();
   }
 
+
   void MakeBigStepAVX2(){
     for(int i=0; i<(this->num_substeps_per_big_step-1); i++){
       MakeSmallStepAllThreadsAVX2(false);
@@ -334,6 +347,7 @@ public:
     MakeSmallStepAllThreadsAVX2(true);
   }
 
+  //Handles the multithreaded execution of MakeSmallStepAVX2()
   void MakeSmallStepAllThreadsAVX2(bool is_last_small_step){
     std::vector<std::thread> worker_threads;
     for(int i=0; i<(this->num_threads-1); i++){
@@ -354,6 +368,12 @@ public:
     this->batched_particles_current_step.swap(this->batched_particles_next_step);
   }
 
+  //Computes the acceleration on each particle that this thread is responsible
+  //for and computes from that the velocity and postion in the next step.
+  //The bool is_last_small_step makes sure the acceleration data is exported
+  //for the last small step within a big step.
+  //Uses AVX2 instructions -> Executing CPU must support these (alternative is
+  //SimulateCPU() or SimulateGPU())
   void MakeSmallStepAVX2(int thread_id, bool is_last_small_step){
     //Loop over batches that "belong" to this thread
     for(int batch_id=this->num_batches_before_this_thread[thread_id];
@@ -491,6 +511,8 @@ public:
   //TODO: SimulationGPU()
   //TODO: SimulationGPUCPU()
 
+  //Saves particle data obtained from SimulateCPU() from current big step to
+  //out_put_data
   void SaveCurrentStep(){
     for(int i=0; i<this->num_particles; i++){
       for(int j=0; j<3; j++){
@@ -509,6 +531,8 @@ public:
     }
   }
 
+  //Saves particle data obtained from SimulateAVX2() from current big step to
+  //out_put_data
   void SaveCurrentStepBatched(){
     for(int i=0; i<this->num_particles; i++){
       int batch_id = i / SIMD_float_t_width;
@@ -638,22 +662,24 @@ public:
 private:
   //Parameters
   static constexpr float_t G = 6.7430e-11; //gravitational constant
-  int num_particles;
-  int64_t num_big_steps;
-  int64_t num_substeps_per_big_step;
+  int num_particles;  //total number of particles in simulation
+  int64_t num_big_steps;  //number of steps where the result is saved in out_put_data
+  int64_t num_substeps_per_big_step;  //number of steps between each big step
   float_t stepsize;
   int num_threads;
   int64_t current_big_step;
-  int num_batches;
+  int num_batches;  //determined by num_particles and SIMD_float_t_width
   std::vector<int> num_particles_in_this_thread;
   std::vector<int> num_particles_before_this_thread;
   std::vector<int> num_batches_in_this_thread;
   std::vector<int> num_batches_before_this_thread;
-  int particle_set_counter;
+  int particle_set_counter;  //keeps track of how many particles are initialized
   //Particle data
+  //Linearly aranged particle data for SimulateCPU()
   std::unique_ptr<Particle<float_t>[]> particles_current_step;
   std::unique_ptr<Particle<float_t>[]> particles_next_step;
   std::unique_ptr<float_t[]> particle_mass;
+  //Batched particle data for SimulateAVX2()
   std::unique_ptr<ParticleBatch<float_t, SIMD_float_t_width>[]>
       batched_particles_current_step;
   std::unique_ptr<ParticleBatch<float_t, SIMD_float_t_width>[]>
@@ -662,6 +688,7 @@ private:
       particle_batch_masses;
   //Output data
   std::vector<std::vector<OutPutParticle<float_t>>> out_put_data;
+  //Holds acceleration information collected during each big step temporarily
   std::unique_ptr<float_t[]> a_buffer;
   std::unique_ptr<double[]> execution_time;
   int64_t total_execution_time;

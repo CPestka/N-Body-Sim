@@ -65,8 +65,8 @@ int main(){
   my_sim.SetMissingParticlesInBatch();
 
   //choose sim option
-  //my_sim.SimulationCPU();
-  my_sim.SimulationAVX2();
+  //my_sim.SimulateCPU();
+  my_sim.SimulateAVX2();
   //my_sim.SimulationGPU();
   //my_sim.SimulationGPUCPU();
 
