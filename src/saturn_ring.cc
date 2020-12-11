@@ -39,7 +39,7 @@ int main(){
 
   //std::random_device r;
   //std::default_random_engine engine(r());
-  std::default_random_engine engine(4);
+  std::default_random_engine engine(42);
   std::normal_distribution<double> disc_height_distro(0, disc_thickness_sigma);
   std::normal_distribution<double> disc_radius_distro(0, ring_width_sigma);
   std::uniform_real_distribution<double> phase_distro(0, 2*M_PI);

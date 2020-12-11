@@ -130,8 +130,6 @@ public:
         SIMD_float_t_width>[]>(num_batches_);
     out_put_data_.resize(num_big_steps_ + 1,
         std::vector<OutPutParticle<float_t>>(num_particles_));
-    a_buffer_ = std::make_unique<float_t[]>(3 * num_batches_ *
-      SIMD_float_t_width);
     execution_time_ = std::make_unique<double[]>(num_big_steps_);
   }
 
@@ -188,15 +186,12 @@ public:
   void SimulateCPU(){
     IntervallTimer sim_timer;
     //Save initial particle data
-    SaveCurrentStep();
+    SaveFirstStep();
 
     for(int i=0; i<num_big_steps_; i++){
       IntervallTimer big_step_timer;
-
-      MakeBigStep();
-
       current_big_step_++;
-      SaveCurrentStep();
+      MakeBigStep();
       std::cout << (static_cast<float_t>(current_big_step_) /
                     num_big_steps_) * 100
                 << "% done" << std::endl;
@@ -295,12 +290,24 @@ public:
       particles_next_step_[i].r[2] = particles_current_step_[i].r[2] +
           (stepsize_ * particles_current_step_[i].v[2]);
 
-      //Save the acceleration of the particle in buffer as an output
+      //Save the output data of the particle in out_put_data_
       //if it is the last small step and discard it otherwise.
       if (is_last_small_step) {
-        a_buffer_[3 * i] = a[0] * G_;
-        a_buffer_[(3 * i) + 1] = a[1] * G_;
-        a_buffer_[(3 * i) + 2] = a[2] * G_;
+        out_put_data_[current_big_step_][i].r[0] = particles_next_step_[i].r[0];
+        out_put_data_[current_big_step_][i].r[1] = particles_next_step_[i].r[1];
+        out_put_data_[current_big_step_][i].r[2] = particles_next_step_[i].r[2];
+
+        out_put_data_[current_big_step_][i].v[0] = particles_next_step_[i].v[0];
+        out_put_data_[current_big_step_][i].v[1] = particles_next_step_[i].v[1];
+        out_put_data_[current_big_step_][i].v[2] = particles_next_step_[i].v[2];
+
+        out_put_data_[current_big_step_][i].a[0] = a[0] * G_;
+        out_put_data_[current_big_step_][i].a[1] = a[1] * G_;
+        out_put_data_[current_big_step_][i].a[2] = a[2] * G_;
+
+        out_put_data_[current_big_step_][i].m = particle_mass_[i];
+        out_put_data_[current_big_step_][i].t = stepsize_ * current_big_step_ *
+                                                num_substeps_per_big_step_;
       }
     }
   }
@@ -313,13 +320,12 @@ public:
   void SimulateAVX2(){
     IntervallTimer sim_timer;
     //Initial particle data is saved
-    SaveCurrentStepBatched();
+    SaveFirstStep();
 
     for(int i=0; i<num_big_steps_; i++){
       IntervallTimer big_step_timer;
-      MakeBigStepAVX2();
       current_big_step_++;
-      SaveCurrentStepBatched();
+      MakeBigStepAVX2();
       std::cout << (static_cast<float_t>(current_big_step_) /
                                         num_big_steps_)*100
                 << "% done" << std::endl;
@@ -497,9 +503,32 @@ public:
 
         if (is_last_small_step) {
           int particle_id = batch_id * SIMD_float_t_width + inter_batch_id;
-          a_buffer_[3*particle_id] = final_acceleration[0];
-          a_buffer_[(3*particle_id)+1] = final_acceleration[1];
-          a_buffer_[(3*particle_id)+2] = final_acceleration[2];
+
+          out_put_data_[current_big_step_][particle_id].r[0] =
+              particles_next_step_[particle_id].r[0];
+          out_put_data_[current_big_step_][particle_id].r[1] =
+              particles_next_step_[particle_id].r[1];
+          out_put_data_[current_big_step_][particle_id].r[2] =
+              particles_next_step_[particle_id].r[2];
+
+          out_put_data_[current_big_step_][particle_id].v[0] =
+              particles_next_step_[particle_id].v[0];
+          out_put_data_[current_big_step_][particle_id].v[1] =
+              particles_next_step_[particle_id].v[1];
+          out_put_data_[current_big_step_][particle_id].v[2] =
+              particles_next_step_[particle_id].v[2];
+
+          out_put_data_[current_big_step_][particle_id].a[0] =
+              final_acceleration[0];
+          out_put_data_[current_big_step_][particle_id].a[1] =
+              final_acceleration[1];
+          out_put_data_[current_big_step_][particle_id].a[2] =
+              final_acceleration[2];
+
+          out_put_data_[current_big_step_][particle_id].m =
+              particle_mass_[particle_id];
+          out_put_data_[current_big_step_][particle_id].t =
+              stepsize_ * current_big_step_ * num_substeps_per_big_step_;
         }
       }
     }
@@ -508,54 +537,16 @@ public:
   //TODO: SimulationGPU()
   //TODO: SimulationGPUCPU() (if it makes senese, which it probably doesnt)
 
-  //Saves particle data obtained from SimulateCPU() from current big step to
-  //out_put_data_
-  void SaveCurrentStep(){
+  //Saves initial particle data to out_put_data_
+  void SaveFirstStep(){
     for(int i=0; i<num_particles_; i++){
       for(int j=0; j<3; j++){
-        out_put_data_[current_big_step_][i].r[j] =
-            particles_current_step_[i].r[j];
-        out_put_data_[current_big_step_][i].v[j] =
-            particles_current_step_[i].v[j];
-        out_put_data_[current_big_step_][i].a[j] = a_buffer_[(3*i) + j];
+        out_put_data_[0][i].r[j] = particles_current_step_[i].r[j];
+        out_put_data_[0][i].v[j] = particles_current_step_[i].v[j];
+        out_put_data_[0][i].a[j] = 0;
       }
-      out_put_data_[current_big_step_][i].m = particle_mass_[i];
-      out_put_data_[current_big_step_][i].t = current_big_step_ *
-                                              num_substeps_per_big_step_ *
-                                              stepsize_;
-    }
-  }
-
-  //Saves particle data obtained from SimulateAVX2() from current big step to
-  //out_put_data_
-  void SaveCurrentStepBatched(){
-    for(int i=0; i<num_particles_; i++){
-      int batch_id = i / SIMD_float_t_width;
-      int inter_batch_id = i % SIMD_float_t_width;
-
-      out_put_data_[current_big_step_][i].r[0] =
-          batched_particles_current_step_[batch_id].r_x[inter_batch_id];
-      out_put_data_[current_big_step_][i].r[1] =
-          batched_particles_current_step_[batch_id].r_y[inter_batch_id];
-      out_put_data_[current_big_step_][i].r[2] =
-          batched_particles_current_step_[batch_id].r_z[inter_batch_id];
-
-      out_put_data_[current_big_step_][i].v[0] =
-          batched_particles_current_step_[batch_id].v_x[inter_batch_id];
-      out_put_data_[current_big_step_][i].v[1] =
-          batched_particles_current_step_[batch_id].v_y[inter_batch_id];
-      out_put_data_[current_big_step_][i].v[2] =
-          batched_particles_current_step_[batch_id].v_z[inter_batch_id];
-
-      out_put_data_[current_big_step_][i].a[0] = a_buffer_[3*i];
-      out_put_data_[current_big_step_][i].a[1] = a_buffer_[(3*i) + 1];
-      out_put_data_[current_big_step_][i].a[2] = a_buffer_[(3*i) + 2];
-
-      out_put_data_[current_big_step_][i].m =
-          particle_batch_masses_[batch_id].m[inter_batch_id];
-      out_put_data_[current_big_step_][i].t = current_big_step_ *
-                                              num_substeps_per_big_step_ *
-                                              stepsize_;
+      out_put_data_[0][i].m = particle_mass_[i];
+      out_put_data_[0][i].t = 0 * num_substeps_per_big_step_ * stepsize_;
     }
   }
 
@@ -684,7 +675,6 @@ private:
   //Output data:
   std::vector<std::vector<OutPutParticle<float_t>>> out_put_data_;
   //Holds acceleration information collected during each big step temporarily
-  std::unique_ptr<float_t[]> a_buffer_;
   std::unique_ptr<double[]> execution_time_;
   int64_t total_execution_time_;
 };
