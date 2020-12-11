@@ -13,7 +13,7 @@ int main(){
   constexpr int num_double_in_SIMD_register = 4;  //avx2 -> 256bit -> 4 doubles
 
   constexpr int num_big_steps = 400; //quantifies samples in outputfile
-  constexpr double t_delta = (60*60*24);
+  constexpr double t_delta = (60*24);
   constexpr double steps_per_second = 100;
   constexpr int64_t num_total_steps = ceil((steps_per_second * t_delta)
                                             /num_big_steps)*num_big_steps;
@@ -54,7 +54,8 @@ int main(){
   for(int i=1; i<num_particles; i++){
     double x_deviation[3] = {0.0, disc_height_distro(engine), 0.0};
     double y_deviation[3] = {v_dev_distro(engine), v_dev_distro(engine), 0.0};
-    input = NonCircularOrbitMoon<double>(x_deviation, y_deviation, phase_distro(engine),
+    input = NonCircularOrbitMoon<double>(x_deviation, y_deviation,
+                                 phase_distro(engine),
                                  0.0, 0.0, true, 5.683e+26,
                                  pow(mass_distro(engine), 2),
                                  ring_radius + disc_radius_distro(engine));
@@ -67,8 +68,6 @@ int main(){
   //choose sim option
   //my_sim.SimulateCPU();
   my_sim.SimulateAVX2();
-  //my_sim.SimulationGPU();
-  //my_sim.SimulationGPUCPU();
 
   //my_sim.WriteParticleFiles("");
   my_sim.WriteTimestepFiles("");

@@ -55,8 +55,6 @@ int main(){
   //choose sim option
   my_sim.SimulateCPU();
   //my_sim.SimulateAVX2();
-  //my_sim.SimulationGPU();
-  //my_sim.SimulationGPUCPU();
 
   my_sim.WriteParticleFiles("");
   //my_sim.WriteTimestepFiles("");
