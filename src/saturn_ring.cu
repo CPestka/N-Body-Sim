@@ -2,9 +2,10 @@
 #include <thread>
 #include <random>
 #include <cstdint>
+#include <optional>
 
-#include "particle_simulation.h"
 #include "particle_initializer.h"
+#include "particle_simulation_GPU.cu"
 
 //Example file intended to show how the simulation is set up and performed
 //Example is saturn orbited by particles in the postion of saturns ring
@@ -13,7 +14,7 @@ int main(){
   constexpr int num_double_in_SIMD_register = 4;  //avx2 -> 256bit -> 4 doubles
 
   constexpr int num_big_steps = 400; //quantifies samples in outputfile
-  constexpr double t_delta = (60*24);
+  constexpr double t_delta = 2*(60*60*24);
   constexpr double steps_per_second = 100;
   constexpr int64_t num_total_steps = ceil((steps_per_second * t_delta)
                                             /num_big_steps)*num_big_steps;
@@ -71,8 +72,8 @@ int main(){
   std::optional<std::string> GPU_simulation_error = my_sim.SimulateGPU();
   if (GPU_simulation_error) std::cout << GPU_simulation_error.value() << std::endl;
 
-  my_sim.WriteParticleFiles("");
-  //my_sim.WriteTimestepFiles("");
+  //my_sim.WriteParticleFiles("");
+  my_sim.WriteTimestepFiles("");
 
   my_sim.PrintAverageStepTime();
 }

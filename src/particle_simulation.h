@@ -7,16 +7,13 @@
 #include <vector>
 #include <memory>
 #include <cmath>
+#include <optional>
 #include <thread>
-//Condition_variable solution used instead of latch since latch is not
-//yet implemented in gcc or clang
-#include <mutex>
-#include <condition_variable>
-///#include <latch>
 #include <sstream>
 #include <iomanip>
 
 #include "timer.h"
+#include "particle_simulation_GPU.cu"
 
 //Includes mainly the class ParticleSimulation, which holds the particles data
 //and performs the Simulation
@@ -28,6 +25,13 @@ struct Particle{
 };
 
 template<typename T>
+struct DeviceOutputParticle{
+  T r[3];
+  T v[3];
+  T a[3];
+};
+
+template<typename T>
 struct OutPutParticle{
   T r[3];
   T v[3];
@@ -35,6 +39,7 @@ struct OutPutParticle{
   T m;
   T t;
 };
+
 
 //The batched structs are arranged differently and specificaly alligned to allow
 //the usage of aligned avx load instructions
@@ -131,6 +136,11 @@ public:
     out_put_data_.resize(num_big_steps_ + 1,
         std::vector<OutPutParticle<float_t>>(num_particles_));
     execution_time_ = std::make_unique<double[]>(num_big_steps_);
+    //Device memory will be allocated by CopyDataToDevice()
+    dptr_particles_current_step_ = nullptr;
+    dptr_particles_next_step_ = nullptr;
+    dptr_particle_masses_ = nullptr;
+    dptr_output_data_ = nullptr;
   }
 
   //Used to initialize data of particles before the simulation
@@ -505,18 +515,18 @@ public:
           int particle_id = batch_id * SIMD_float_t_width + inter_batch_id;
 
           out_put_data_[current_big_step_][particle_id].r[0] =
-              particles_next_step_[particle_id].r[0];
+              batched_particles_next_step_[batch_id].r_x[inter_batch_id];
           out_put_data_[current_big_step_][particle_id].r[1] =
-              particles_next_step_[particle_id].r[1];
+              batched_particles_next_step_[batch_id].r_y[inter_batch_id];
           out_put_data_[current_big_step_][particle_id].r[2] =
-              particles_next_step_[particle_id].r[2];
+              batched_particles_next_step_[batch_id].r_z[inter_batch_id];
 
           out_put_data_[current_big_step_][particle_id].v[0] =
-              particles_next_step_[particle_id].v[0];
+              batched_particles_next_step_[batch_id].v_x[inter_batch_id];
           out_put_data_[current_big_step_][particle_id].v[1] =
-              particles_next_step_[particle_id].v[1];
+              batched_particles_next_step_[batch_id].v_y[inter_batch_id];
           out_put_data_[current_big_step_][particle_id].v[2] =
-              particles_next_step_[particle_id].v[2];
+              batched_particles_next_step_[batch_id].v_z[inter_batch_id];
 
           out_put_data_[current_big_step_][particle_id].a[0] =
               final_acceleration[0];
@@ -534,8 +544,16 @@ public:
     }
   }
 
-  //TODO: SimulationGPU()
-  //TODO: SimulationGPUCPU() (if it makes senese, which it probably doesnt)
+  std::optional<std::string> SimulateGPU(int blocksize = 64);
+  bool AllocateDeviceMemory();
+  bool CopyDataToDevice();
+  void SimulateOnDevice(int blocksize);
+  void MakeBigStepDevice(int blocksize, int current_big_step);
+  bool CopyResultsToHost();
+  bool FreeDeviceMemory();
+  void PrepareOutputDataOnHost();
+
+  //TODO: SimulateGPUCPU() (if it makes senese, which it probably doesnt)
 
   //Saves initial particle data to out_put_data_
   void SaveFirstStep(){
@@ -660,6 +678,7 @@ private:
   std::vector<int> num_batches_before_this_thread_;
   //keeps track of how many particles are initialized
   int particle_set_counter_;
+
   //Particle data:
   //Linearly aranged particle data for SimulateCPU()
   std::unique_ptr<Particle<float_t>[]> particles_current_step_;
@@ -672,6 +691,11 @@ private:
       batched_particles_next_step_;
   std::unique_ptr<ParticleMassBatch<float_t,SIMD_float_t_width>[]>
       particle_batch_masses_;
+  //Data on the device (smart  ptrs are not properly supported on the device)
+  Particle<float_t>* dptr_particles_current_step_;
+  Particle<float_t>* dptr_particles_next_step_;
+  float_t* dptr_particle_masses_;
+  DeviceOutputParticle<float_t>* dptr_output_data_;
   //Output data:
   std::vector<std::vector<OutPutParticle<float_t>>> out_put_data_;
   //Holds acceleration information collected during each big step temporarily
