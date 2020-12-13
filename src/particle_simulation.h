@@ -13,7 +13,6 @@
 #include <iomanip>
 
 #include "timer.h"
-#include "particle_simulation_GPU.cu"
 
 //Includes mainly the class ParticleSimulation, which holds the particles data
 //and performs the Simulation
@@ -139,8 +138,9 @@ public:
     //Device memory will be allocated by CopyDataToDevice()
     dptr_particles_current_step_ = nullptr;
     dptr_particles_next_step_ = nullptr;
-    dptr_particle_masses_ = nullptr;
+    dptr_particle_mass_ = nullptr;
     dptr_output_data_ = nullptr;
+    output_data_from_device_ = nullptr;
   }
 
   //Used to initialize data of particles before the simulation
@@ -202,11 +202,9 @@ public:
       IntervallTimer big_step_timer;
       current_big_step_++;
       MakeBigStep();
-      std::cout << (static_cast<float_t>(current_big_step_) /
-                    num_big_steps_) * 100
-                << "% done" << std::endl;
       execution_time_[i] =
           static_cast<double>(big_step_timer.getTimeInMicroseconds()) * 1.0e-06;
+      PrintSimulationProgress(current_big_step_);
     }
 
     total_execution_time_ = sim_timer.getTimeInSeconds();
@@ -336,11 +334,9 @@ public:
       IntervallTimer big_step_timer;
       current_big_step_++;
       MakeBigStepAVX2();
-      std::cout << (static_cast<float_t>(current_big_step_) /
-                                        num_big_steps_)*100
-                << "% done" << std::endl;
       execution_time_[i] =
           static_cast<double>(big_step_timer.getTimeInMicroseconds()) * 1.0e-06;
+      PrintSimulationProgress(current_big_step_);
     }
 
     total_execution_time_ = sim_timer.getTimeInSeconds();
@@ -544,7 +540,7 @@ public:
     }
   }
 
-  std::optional<std::string> SimulateGPU(int blocksize = 64);
+  std::string SimulateGPU(int blocksize = 64);
   bool AllocateDeviceMemory();
   bool CopyDataToDevice();
   void SimulateOnDevice(int blocksize);
@@ -566,6 +562,23 @@ public:
       out_put_data_[0][i].m = particle_mass_[i];
       out_put_data_[0][i].t = 0 * num_substeps_per_big_step_ * stepsize_;
     }
+  }
+
+  void PrintSimulationProgress(int current_big_step){
+    double current_average = 0;
+    for(int j=0; j<current_big_step; j++){
+      current_average += execution_time_[j];
+    }
+    current_average = current_average / current_big_step;
+    int h = static_cast<int>(((num_big_steps_ - current_big_step) * current_average)) /
+        3600;
+    int min = (static_cast<int>(((num_big_steps_ - current_big_step) * current_average)) %
+        3600) /60;
+    int s = static_cast<int>(((num_big_steps_ - current_big_step) * current_average)) % 60;
+    std::cout << (static_cast<float_t>(current_big_step+1) / num_big_steps_)*100
+              << "% done\nThis big step toke: " << execution_time_[current_big_step] << "s\n"
+              << "Approximate remaining time: " << h << "h " << min << "min "
+              << s << "s " << std::endl;
   }
 
   //Writes the data from all big time steps, of one particle, to one file, for
@@ -694,8 +707,9 @@ private:
   //Data on the device (smart  ptrs are not properly supported on the device)
   Particle<float_t>* dptr_particles_current_step_;
   Particle<float_t>* dptr_particles_next_step_;
-  float_t* dptr_particle_masses_;
+  float_t* dptr_particle_mass_;
   DeviceOutputParticle<float_t>* dptr_output_data_;
+  DeviceOutputParticle<float_t>* output_data_from_device_; //On host
   //Output data:
   std::vector<std::vector<OutPutParticle<float_t>>> out_put_data_;
   //Holds acceleration information collected during each big step temporarily

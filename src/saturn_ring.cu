@@ -2,7 +2,6 @@
 #include <thread>
 #include <random>
 #include <cstdint>
-#include <optional>
 
 #include "particle_initializer.h"
 #include "particle_simulation_GPU.cu"
@@ -14,15 +13,15 @@ int main(){
   constexpr int num_double_in_SIMD_register = 4;  //avx2 -> 256bit -> 4 doubles
 
   constexpr int num_big_steps = 400; //quantifies samples in outputfile
-  constexpr double t_delta = 2*(60*60*24);
+  constexpr double t_delta = (60*60);
   constexpr double steps_per_second = 100;
-  constexpr int64_t num_total_steps = ceil((steps_per_second * t_delta)
+  int64_t num_total_steps = ceil((steps_per_second * t_delta)
                                             /num_big_steps)*num_big_steps;
-  constexpr int num_substeps_per_big_step = num_total_steps / num_big_steps;
-  constexpr double stepsize = t_delta / num_total_steps;
+  int num_substeps_per_big_step = num_total_steps / num_big_steps;
+  double stepsize = t_delta / num_total_steps;
 
   //parameters for the ring
-  constexpr int num_particles = 500;
+  constexpr int num_particles = 32*8*15;
   constexpr double v_deviation_sigma = 50;
   constexpr double disc_thickness_sigma = 50;
   constexpr double ring_radius = 1.12e+8;
@@ -69,10 +68,9 @@ int main(){
   //choose sim option
   //my_sim.SimulateCPU();
   //my_sim.SimulateAVX2();
-  std::optional<std::string> GPU_simulation_error = my_sim.SimulateGPU();
-  if (GPU_simulation_error) std::cout << GPU_simulation_error.value() << std::endl;
+  std::cout << my_sim.SimulateGPU(32) << std::endl;
 
-  //my_sim.WriteParticleFiles("");
+  my_sim.WriteParticleFiles("");
   my_sim.WriteTimestepFiles("");
 
   my_sim.PrintAverageStepTime();

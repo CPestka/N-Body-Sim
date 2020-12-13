@@ -12,7 +12,7 @@ system('mkdir -p ../data/png/saturn')
 
 
 n=0
-num_big_steps = 100;
+num_big_steps = 400;
 do for [ii=1:num_big_steps] {
     set output sprintf('../data/png/saturn/nBody%03.0f.png',n)
     plotline = sprintf("splot '../data/raw/saturnRing/N_Body_Timestep_%05.0f.txt' u 2:3:4 w p ls 1 lc 1 notitle",n,n)
