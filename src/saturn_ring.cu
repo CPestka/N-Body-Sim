@@ -12,7 +12,7 @@
 int main(){
   constexpr int num_double_in_SIMD_register = 4;  //avx2 -> 256bit -> 4 doubles
 
-  constexpr int num_big_steps = 400; //quantifies samples in outputfile
+  constexpr int num_big_steps = 10; //quantifies samples in outputfile
   constexpr double t_delta = (60*60);
   constexpr double steps_per_second = 100;
   int64_t num_total_steps = ceil((steps_per_second * t_delta)
@@ -21,7 +21,7 @@ int main(){
   double stepsize = t_delta / num_total_steps;
 
   //parameters for the ring
-  constexpr int num_particles = 32*8*15;
+  constexpr int num_particles = 32;
   constexpr double v_deviation_sigma = 50;
   constexpr double disc_thickness_sigma = 50;
   constexpr double ring_radius = 1.12e+8;
@@ -71,7 +71,7 @@ int main(){
   std::cout << my_sim.SimulateGPU(32) << std::endl;
 
   my_sim.WriteParticleFiles("");
-  my_sim.WriteTimestepFiles("");
+  //my_sim.WriteTimestepFiles("");
 
   my_sim.PrintAverageStepTime();
 }

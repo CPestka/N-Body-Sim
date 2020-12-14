@@ -575,7 +575,7 @@ public:
     int min = (static_cast<int>(((num_big_steps_ - current_big_step) * current_average)) %
         3600) /60;
     int s = static_cast<int>(((num_big_steps_ - current_big_step) * current_average)) % 60;
-    std::cout << (static_cast<float_t>(current_big_step+1) / num_big_steps_)*100
+    std::cout << (static_cast<float_t>(current_big_step) / num_big_steps_)*100
               << "% done\nThis big step toke: " << execution_time_[current_big_step] << "s\n"
               << "Approximate remaining time: " << h << "h " << min << "min "
               << s << "s " << std::endl;

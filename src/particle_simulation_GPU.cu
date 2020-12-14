@@ -8,6 +8,30 @@
 #include "particle_simulation.h"
 #include "timer.h"
 
+template<typename float_t, int SIMD_float_t_width>
+bool ParticleSimulation<float_t, SIMD_float_t_width>::AllocateDeviceMemory(){
+  if (cudaMalloc(&dptr_particles_current_step_,
+                 sizeof(Particle<float_t>) * num_particles_)
+      != cudaSuccess) {
+    return false;
+  }
+  if (cudaMalloc(&dptr_particles_next_step_, sizeof(Particle<float_t>) *
+                 num_particles_)
+      != cudaSuccess) {
+    return false;
+  }
+  if (cudaMalloc(&dptr_particle_mass_, sizeof(float_t) * num_particles_)
+      != cudaSuccess) {
+    return false;
+  }
+  if (cudaMalloc(&dptr_output_data_, sizeof(DeviceOutputParticle<float_t>) *
+                 num_particles_ * num_big_steps_)
+      != cudaSuccess) {
+    return false;
+  }
+  return true;
+}
+
 //Allocates memory for and copies all neccessary data from host to the device
 //Returns true if all allocations and memcopys were succesfull and false
 //otherwise
@@ -149,11 +173,13 @@ bool ParticleSimulation<float_t, SIMD_float_t_width>::CopyResultsToHost(){
   output_data_from_device_ = new DeviceOutputParticle<float_t>[num_particles_ *
                                                                num_big_steps_];
   if (cudaMemcpy(output_data_from_device_, dptr_output_data_,
-                 sizeof(DeviceOutputParticle<float_t>) * num_big_steps_,
+                 sizeof(DeviceOutputParticle<float_t>) * num_big_steps_ *
+                 num_particles_,
                  cudaMemcpyDeviceToHost)
       != cudaSuccess) {
     return false;
   }
+  cudaDeviceSynchronize();
   return true;
 }
 
@@ -187,47 +213,22 @@ void ParticleSimulation<float_t, SIMD_float_t_width>::PrepareOutputDataOnHost(){
     out_put_data_[0][i].t = 0;
   }
   //Save simulation data from device
-  for(int i=0; i<num_big_steps_; i++){
+  for(int i=1; i<num_big_steps_+1; i++){
     for(int j=0; j<num_particles_; j++){
       for(int k=0; k<3; k++){
-        out_put_data_[i+1][j].r[k] =
-            output_data_from_device_[i * num_particles_ + j].r[k];
-        out_put_data_[i+1][j].v[k] =
-            output_data_from_device_[i * num_particles_ + j].v[k];
-        out_put_data_[i+1][j].a[k] =
-            output_data_from_device_[i * num_particles_ + j].a[k];
+        out_put_data_[i][j].r[k] =
+            output_data_from_device_[(i-1) * num_particles_ + j].r[k];
+        out_put_data_[i][j].v[k] =
+            output_data_from_device_[(i-1) * num_particles_ + j].v[k];
+        out_put_data_[i][j].a[k] =
+            output_data_from_device_[(i-1) * num_particles_ + j].a[k];
       }
-      out_put_data_[i+1][j].m = particle_mass_[j];
-      out_put_data_[i+1][j].t = stepsize_ * num_substeps_per_big_step_ * i;
+      out_put_data_[i][j].m = particle_mass_[j];
+      out_put_data_[i][j].t = stepsize_ * num_substeps_per_big_step_ * i;
     }
   }
   delete[] output_data_from_device_;
 }
-
-template<typename float_t, int SIMD_float_t_width>
-bool ParticleSimulation<float_t, SIMD_float_t_width>::AllocateDeviceMemory(){
-  if (cudaMalloc(&dptr_particles_current_step_,
-                 sizeof(Particle<float_t>) * num_particles_)
-      != cudaSuccess) {
-    return false;
-  }
-  if (cudaMalloc(&dptr_particles_next_step_, sizeof(Particle<float_t>) *
-                 num_particles_)
-      != cudaSuccess) {
-    return false;
-  }
-  if (cudaMalloc(&dptr_particle_mass_, sizeof(float_t) * num_particles_)
-      != cudaSuccess) {
-    return false;
-  }
-  if (cudaMalloc(&dptr_output_data_, sizeof(DeviceOutputParticle<float_t>) *
-                 num_particles_ * num_big_steps_)
-      != cudaSuccess) {
-    return false;
-  }
-  return true;
-}
-
 
 template<typename float_t, int SIMD_float_t_width>
 std::string ParticleSimulation<float_t, SIMD_float_t_width>::SimulateGPU(int blocksize){
@@ -249,6 +250,6 @@ std::string ParticleSimulation<float_t, SIMD_float_t_width>::SimulateGPU(int blo
   }
   PrepareOutputDataOnHost();
   std::cout << "Device execution time: "
-            << device_execution_timer.getTimeInSeconds() << std::endl;
+            << device_execution_timer.getTimeInSeconds() << "s" << std::endl;
   return {"Simulation on GPU succesfull."};
 }
