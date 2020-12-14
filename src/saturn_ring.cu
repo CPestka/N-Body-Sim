@@ -16,9 +16,9 @@ int main(){
   //are still needed for the constructor of ParticleSimulation
   constexpr int num_double_in_SIMD_register = 4;  //avx2 -> 256bit -> 4 doubles
 
-  constexpr int num_big_steps = 100; //quantifies samples in outputfile
-  constexpr double t_delta = (60);
-  constexpr double steps_per_second = 100;
+  constexpr int num_big_steps = 500; //quantifies samples in outputfile
+  constexpr double t_delta = (60*60*18);
+  constexpr double steps_per_second = 50;
   int64_t num_total_steps = ceil((steps_per_second * t_delta)
                                             /num_big_steps)*num_big_steps;
   int num_substeps_per_big_step = num_total_steps / num_big_steps;
@@ -26,7 +26,7 @@ int main(){
 
   //parameters for the ring
   //Choose multiples of the blocksize for best per particle performance
-  constexpr int num_particles = 32;
+  constexpr int num_particles = 2000;
   constexpr double v_deviation_sigma = 50;
   constexpr double disc_thickness_sigma = 50;
   constexpr double ring_radius = 1.12e+8;
@@ -69,8 +69,8 @@ int main(){
   //perform Simulation
   std::cout << my_sim.SimulateGPU(32) << std::endl;
 
-  my_sim.WriteParticleFiles("");
-  //my_sim.WriteTimestepFiles("");
+  //my_sim.WriteParticleFiles("");
+  my_sim.WriteTimestepFiles("");
 
   my_sim.PrintAverageStepTime();
 }
