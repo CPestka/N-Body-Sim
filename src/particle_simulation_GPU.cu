@@ -84,7 +84,7 @@ __global__ void MakeSmallStepDevice(
                       dptr_particles_current_step[id].r[2];
 
     float_t r_squared = fma(delta_x, delta_x, fma(delta_y, delta_y,
-                                                  delta_x * delta_x));
+                                                  delta_z * delta_z));
 
     //Force diverges for r=0
     //Deals with the "unlucky" cases where particles end up in the same
