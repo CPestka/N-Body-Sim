@@ -135,7 +135,8 @@ public:
     out_put_data_.resize(num_big_steps_ + 1,
         std::vector<OutPutParticle<float_t>>(num_particles_));
     execution_time_ = std::make_unique<double[]>(num_big_steps_);
-    //Device memory will be allocated by CopyDataToDevice()
+    //Device memory will be allocated by AllocateDeviceMemory() and freed by
+    //FreeDeviceMemory() during the call of SimulateGPU()
     dptr_particles_current_step_ = nullptr;
     dptr_particles_next_step_ = nullptr;
     dptr_particle_mass_ = nullptr;
@@ -298,8 +299,8 @@ public:
       particles_next_step_[i].r[2] = particles_current_step_[i].r[2] +
           (stepsize_ * particles_current_step_[i].v[2]);
 
-      //Save the output data of the particle in out_put_data_
-      //if it is the last small step and discard it otherwise.
+      //Saves the result in out_put_data_ if on the last small step of a big
+      //step
       if (is_last_small_step) {
         out_put_data_[current_big_step_][i].r[0] = particles_next_step_[i].r[0];
         out_put_data_[current_big_step_][i].r[1] = particles_next_step_[i].r[1];
@@ -507,6 +508,8 @@ public:
             (stepsize_ *
             batched_particles_current_step_[batch_id].v_z[inter_batch_id]);
 
+        //Saves the result in out_put_data_ if on the last small step of a big
+        //step
         if (is_last_small_step) {
           int particle_id = batch_id * SIMD_float_t_width + inter_batch_id;
 
@@ -540,13 +543,44 @@ public:
     }
   }
 
-  std::string SimulateGPU(int blocksize = 64);
+  //This group of functions are the host functions needed for the device
+  //simulation and are implemented in particle_simulation_GPU.cu.
+  //If SimulateGPU() is needed include particle_simulation_GPU.cu in the main
+  //and compile with nvcc instead (see ReadMe)
+  //SimulateGPU() performs the simulation on the device analogous to SimulateCPU
+  //It returns a string that either indicates the success of the simulation or
+  //specifies the scource of failure.
+  //The parameter blocksize can be varried to improve performance. In general
+  //it should be choosen as a low multiple of the warpsize (32) and the
+  //resulting amount of blocks (i.e. ceil(num_particles_/blocksize)) should be
+  //a bit higher than the SM count of the used device (\approx> 2x ?)
+  //More information is provided in the occupancy section of the cuda
+  //Best Practises Guide
+  std::string SimulateGPU(int blocksize = 32);
+  //Calls cudaMalloc to allocate memory for the needed data arrays on the device
+  //Returns true if successfull and false for any allocation error
   bool AllocateDeviceMemory();
+  //Calls cudaMemcpy to copy said data
+  //Returns true if successfull and false for any error during or before
+  //transmition
   bool CopyDataToDevice();
+  //Performs the simulation
   void SimulateOnDevice(int blocksize);
+  //Analogous to MakeBigStep but on the device
   void MakeBigStepDevice(int blocksize, int current_big_step);
+  //Transfers the results back to the host
+  //Returns true if successfull and false for any error during or before
+  //transmition
   bool CopyResultsToHost();
+  //Frees the device memory allocated by AllocateDeviceMemory() (smart_ptr are
+  //not available for device memory)
+  //Returns true if successfull and false for any error during freeing
   bool FreeDeviceMemory();
+  //To increase the speed of the transfer and reduce memory usage on the device
+  //on the device DeviceOutputParticle instead of OutPutParticle is used.
+  //This funtion converts the device result stored in DeviceOutputParticles
+  //into OutPutParticles, stored in out_put_data_, which is needed for
+  //WriteParticleFiles() and WriteTimestepFiles().
   void PrepareOutputDataOnHost();
 
   //TODO: SimulateGPUCPU() (if it makes senese, which it probably doesnt)
@@ -576,7 +610,7 @@ public:
         3600) /60;
     int s = static_cast<int>(((num_big_steps_ - current_big_step) * current_average)) % 60;
     std::cout << (static_cast<float_t>(current_big_step) / num_big_steps_)*100
-              << "% done\nThis big step toke: " << execution_time_[current_big_step] << "s\n"
+              << "% done\nThis big step toke: " << execution_time_[current_big_step-1] << "s\n"
               << "Approximate remaining time: " << h << "h " << min << "min "
               << s << "s " << std::endl;
   }
@@ -709,7 +743,8 @@ private:
   Particle<float_t>* dptr_particles_next_step_;
   float_t* dptr_particle_mass_;
   DeviceOutputParticle<float_t>* dptr_output_data_;
-  DeviceOutputParticle<float_t>* output_data_from_device_; //On host
+  //Destination buffer for the transfer of dptr_output_data_ to the host
+  DeviceOutputParticle<float_t>* output_data_from_device_;
   //Output data:
   std::vector<std::vector<OutPutParticle<float_t>>> out_put_data_;
   //Holds acceleration information collected during each big step temporarily

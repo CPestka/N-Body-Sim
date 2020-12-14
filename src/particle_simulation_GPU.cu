@@ -8,6 +8,8 @@
 #include "particle_simulation.h"
 #include "timer.h"
 
+//Calls cudaMalloc to allocate memory for the needed data arrays on the device
+//Returns true if successfull and false for any allocation error
 template<typename float_t, int SIMD_float_t_width>
 bool ParticleSimulation<float_t, SIMD_float_t_width>::AllocateDeviceMemory(){
   if (cudaMalloc(&dptr_particles_current_step_,
@@ -32,9 +34,9 @@ bool ParticleSimulation<float_t, SIMD_float_t_width>::AllocateDeviceMemory(){
   return true;
 }
 
-//Allocates memory for and copies all neccessary data from host to the device
-//Returns true if all allocations and memcopys were succesfull and false
-//otherwise
+//Calls cudaMemcpy to copy the particle data to the device.
+//Returns true if successfull and false for any error during or before
+//transmition
 template<typename float_t, int SIMD_float_t_width>
 bool ParticleSimulation<float_t, SIMD_float_t_width>::CopyDataToDevice(){
   if (cudaMemcpy(dptr_particles_current_step_, particles_current_step_.get(),
@@ -53,6 +55,8 @@ bool ParticleSimulation<float_t, SIMD_float_t_width>::CopyDataToDevice(){
 
 
 //TODO: use shared memory for particle data
+//Device kernel whoes threads each calculate the change of postion and velocity
+//of one particle due to the gravitational interaction with all other particles
 template<typename float_t>
 __global__ void MakeSmallStepDevice(
       Particle<float_t>* dptr_particles_current_step,
@@ -61,15 +65,16 @@ __global__ void MakeSmallStepDevice(
       DeviceOutputParticle<float_t>* dptr_output_data,
       int num_particles,
       float_t stepsize, int current_big_step, bool is_last_small_step){
-  //compute particle id from thread  id
+  //Compute particle id from thread id
   int id = (blockIdx.x * blockDim.x) + threadIdx.x;
-  //check if id corresponds to a vaild particle
+  //Check if id corresponds to a vaild particle
   if (id >= num_particles) {
     return;
   }
   float_t a[3] = {0,0,0};
   float_t G = 6.7430e-11;
 
+  //Determine acceleration due to the other particles
   for(int i=0; i<num_particles; i++){
     float_t delta_x = dptr_particles_current_step[i].r[0] -
                       dptr_particles_current_step[id].r[0];
@@ -81,6 +86,9 @@ __global__ void MakeSmallStepDevice(
     float_t r_squared = fma(delta_x, delta_x, fma(delta_y, delta_y,
                                                   delta_x * delta_x));
 
+    //Force diverges for r=0
+    //Deals with the "unlucky" cases where particles end up in the same
+    //place by chances, as well as with the i=j case.
     if (r_squared != 0) {
       float_t tmp = dptr_particle_mass[i] * (1/r_squared) * rsqrt(r_squared);
       a[0] += (tmp * delta_x);
@@ -89,6 +97,14 @@ __global__ void MakeSmallStepDevice(
     }
   }
 
+  //Computes and stores changes in position and velocity in
+  //dptr_particles_next_step_.
+  //Next positions and velocities are calculated via an inline Euler.
+  //Higher order methods like runge kutta are not used since they call
+  //f(y,t) additional times at different y,t to increase accuracy, but
+  //since f(y,t) = acceleration[i] (which is const, i.e. acceleration does
+  //not depend on velocity or time) -> higher order methods are more
+  //expensive versions of euler in our case.
   dptr_particles_next_step[id].v[0] =
       dptr_particles_current_step[id].v[0] + (stepsize * a[0] * G);
   dptr_particles_next_step[id].v[1] =
@@ -106,6 +122,8 @@ __global__ void MakeSmallStepDevice(
       dptr_particles_current_step[id].r[2] +
       (stepsize * dptr_particles_current_step[id].v[2]);
 
+  //Saves the result in out_put_data_ if on the last small step of a big
+  //step
   if (is_last_small_step) {
     int array_offset = (current_big_step * num_particles) + id;
 
@@ -123,6 +141,7 @@ __global__ void MakeSmallStepDevice(
   }
 }
 
+//Analogous to MakeBigStep but on the device
 template<typename float_t, int SIMD_float_t_width>
 void ParticleSimulation<float_t, SIMD_float_t_width>::MakeBigStepDevice(int blocksize, int current_big_step){
   int gridsize = ceil(static_cast<double>(num_particles_) / blocksize);
@@ -131,8 +150,10 @@ void ParticleSimulation<float_t, SIMD_float_t_width>::MakeBigStepDevice(int bloc
         dptr_particles_current_step_, dptr_particles_next_step_,
         dptr_particle_mass_, dptr_output_data_, num_particles_, stepsize_,
         current_big_step, false);
-    //Wait for the calculation of dptr_particles_next_step_ is complete
+
+    //Wait untill the calculation of dptr_particles_next_step_[] is complete
     cudaDeviceSynchronize();
+
     //Swap data, to use data from dptr_particles_next_step_ as
     //dptr_particles_current_step_ in the next call of MakeSmallStepDevice()
     Particle<float_t>* tmp_dptr;
@@ -144,8 +165,10 @@ void ParticleSimulation<float_t, SIMD_float_t_width>::MakeBigStepDevice(int bloc
       dptr_particles_current_step_, dptr_particles_next_step_,
       dptr_particle_mass_, dptr_output_data_, num_particles_, stepsize_,
       current_big_step, true);
-  //Wait for the calculation of dptr_particles_next_step_ is complete
+
+  //Wait untill the calculation of dptr_particles_next_step_ [] is complete
   cudaDeviceSynchronize();
+
   //Swap data, to use data from dptr_particles_next_step_ as
   //dptr_particles_current_step_ in the next call of MakeSmallStepDevice()
   Particle<float_t>* tmp_dptr;
@@ -154,6 +177,7 @@ void ParticleSimulation<float_t, SIMD_float_t_width>::MakeBigStepDevice(int bloc
   dptr_particles_current_step_ = tmp_dptr;
 }
 
+//Performs the simulation
 template<typename float_t, int SIMD_float_t_width>
 void ParticleSimulation<float_t, SIMD_float_t_width>::SimulateOnDevice(int blocksize){
   IntervallTimer sim_timer;
@@ -168,6 +192,9 @@ void ParticleSimulation<float_t, SIMD_float_t_width>::SimulateOnDevice(int block
   total_execution_time_ =  sim_timer.getTimeInSeconds();
 }
 
+//Transfers the results back to the host
+//Returns true if successfull and false for any error during or before
+//transmition
 template<typename float_t, int SIMD_float_t_width>
 bool ParticleSimulation<float_t, SIMD_float_t_width>::CopyResultsToHost(){
   output_data_from_device_ = new DeviceOutputParticle<float_t>[num_particles_ *
@@ -183,6 +210,9 @@ bool ParticleSimulation<float_t, SIMD_float_t_width>::CopyResultsToHost(){
   return true;
 }
 
+//Frees the device memory allocated by AllocateDeviceMemory() (smart_ptr are
+//not available for device memory)
+//Returns true if successfull and false for any error during freeing
 template<typename float_t, int SIMD_float_t_width>
 bool ParticleSimulation<float_t, SIMD_float_t_width>::FreeDeviceMemory(){
   if (cudaFree(dptr_output_data_) != cudaSuccess) {
@@ -200,6 +230,11 @@ bool ParticleSimulation<float_t, SIMD_float_t_width>::FreeDeviceMemory(){
   return true;
 }
 
+//To increase the speed of the transfer and reduce memory usage on the device
+//on the device DeviceOutputParticle instead of OutPutParticle is used.
+//This funtion converts the device result stored in DeviceOutputParticles
+//into OutPutParticles, stored in out_put_data_, which is needed for
+//WriteParticleFiles() and WriteTimestepFiles().
 template<typename float_t, int SIMD_float_t_width>
 void ParticleSimulation<float_t, SIMD_float_t_width>::PrepareOutputDataOnHost(){
   //Save first time step from initial data set
@@ -230,6 +265,15 @@ void ParticleSimulation<float_t, SIMD_float_t_width>::PrepareOutputDataOnHost(){
   delete[] output_data_from_device_;
 }
 
+//SimulateGPU() performs the simulation on the device analogous to SimulateCPU
+//It returns a string that either indicates the success of the simulation or
+//specifies the scource of failure.
+//The parameter blocksize can be varried to improve performance. In general
+//it should be choosen as a low multiple of the warpsize (32) and the
+//resulting amount of blocks (i.e. ceil(num_particles_/blocksize)) should be
+//a bit higher than the SM count of the used device (\approx> 2x ?)
+//More information is provided in the occupancy section of the cuda
+//Best Practises Guide.
 template<typename float_t, int SIMD_float_t_width>
 std::string ParticleSimulation<float_t, SIMD_float_t_width>::SimulateGPU(int blocksize){
   IntervallTimer device_execution_timer;
@@ -242,14 +286,18 @@ std::string ParticleSimulation<float_t, SIMD_float_t_width>::SimulateGPU(int blo
 
   cudaDeviceSynchronize();
   SimulateOnDevice(blocksize);
+
   if (!CopyResultsToHost()) {
     return "Failed to copy results to host.";
   }
   if (!FreeDeviceMemory()) {
     return "Failed to free device memory.";
   }
+
   PrepareOutputDataOnHost();
+
   std::cout << "Device execution time: "
             << device_execution_timer.getTimeInSeconds() << "s" << std::endl;
+
   return {"Simulation on GPU succesfull."};
 }

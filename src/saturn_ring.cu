@@ -4,34 +4,35 @@
 #include <cstdint>
 
 #include "particle_initializer.h"
+//for GPU simulations instead of particle_simulation.h
 #include "particle_simulation_GPU.cu"
 
-//Example file intended to show how the simulation is set up and performed
+//Example file intended to show how a GPU simulation is set up and performed
 //Example is saturn orbited by particles in the postion of saturns ring
 
 int main(){
+  //Values for the AVX2 computation are somewhat irrelevant for the GPU
+  //computation, in that their value is irrelevant for the computation but they
+  //are still needed for the constructor of ParticleSimulation
   constexpr int num_double_in_SIMD_register = 4;  //avx2 -> 256bit -> 4 doubles
 
-  constexpr int num_big_steps = 10; //quantifies samples in outputfile
-  constexpr double t_delta = (60*60);
-  constexpr double steps_per_second = 100;
+  constexpr int num_big_steps = 500; //quantifies samples in outputfile
+  constexpr double t_delta = (60*60*24);
+  constexpr double steps_per_second = 75;
   int64_t num_total_steps = ceil((steps_per_second * t_delta)
                                             /num_big_steps)*num_big_steps;
   int num_substeps_per_big_step = num_total_steps / num_big_steps;
   double stepsize = t_delta / num_total_steps;
 
   //parameters for the ring
-  constexpr int num_particles = 32;
+  //Choose multiples of the blocksize for best per particle performance
+  constexpr int num_particles = 32*40;
   constexpr double v_deviation_sigma = 50;
   constexpr double disc_thickness_sigma = 50;
   constexpr double ring_radius = 1.12e+8;
   constexpr double ring_width_sigma = 3.0e+7;
   constexpr double mass_sigma = 0.1;
 
-  //Specify the num of threads that should be used
-  //No overhead for == 1
-  //Only use multithreading for large N
-  //int num_threads = std::thread::hardware_concurrency();
   int num_threads = 1;
 
   ParticleSimulation<double,num_double_in_SIMD_register> my_sim(num_particles,
@@ -65,13 +66,11 @@ int main(){
   //Is neccesary if N % num_double_in_SIMD_register != 0 (so not needed here)
   my_sim.SetMissingParticlesInBatch();
 
-  //choose sim option
-  //my_sim.SimulateCPU();
-  //my_sim.SimulateAVX2();
+  //perform Simulation
   std::cout << my_sim.SimulateGPU(32) << std::endl;
 
-  my_sim.WriteParticleFiles("");
-  //my_sim.WriteTimestepFiles("");
+  //my_sim.WriteParticleFiles("");
+  my_sim.WriteTimestepFiles("");
 
   my_sim.PrintAverageStepTime();
 }
