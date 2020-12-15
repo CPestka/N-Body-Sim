@@ -41,7 +41,7 @@ g++ -std=c++17 -Wall -O3 -mavx2 -march=native -mtune=native -pthread earth_moon.
 ### Simulation on the GPU
 
 The functionality is provided in particle_simulation_GPU.cu, which should be included instead of particle_simulation.h.
-The simulation on the device isnt (much) faster or even slower for a low amount of particles but starts to be MUCH faster at some point (for my 3900x and my gtx1070 at roughly N=).
+The simulation on the device isnt (much) faster or even alot slower for a low amount of particles but can be much faster at some point.
 
 The included example is the GPU version of saturn_ring.cc provided in saturn_ring.cu.
 

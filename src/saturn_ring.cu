@@ -17,8 +17,8 @@ int main(){
   constexpr int num_double_in_SIMD_register = 4;  //avx2 -> 256bit -> 4 doubles
 
   constexpr int num_big_steps = 500; //quantifies samples in outputfile
-  constexpr double t_delta = (60*60*18);
-  constexpr double steps_per_second = 50;
+  constexpr double t_delta = (60*60*24);
+  constexpr double steps_per_second = 100;
   int64_t num_total_steps = ceil((steps_per_second * t_delta)
                                             /num_big_steps)*num_big_steps;
   int num_substeps_per_big_step = num_total_steps / num_big_steps;
@@ -26,7 +26,7 @@ int main(){
 
   //parameters for the ring
   //Choose multiples of the blocksize for best per particle performance
-  constexpr int num_particles = 2000;
+  constexpr int num_particles = 1500;
   constexpr double v_deviation_sigma = 50;
   constexpr double disc_thickness_sigma = 50;
   constexpr double ring_radius = 1.12e+8;
@@ -58,7 +58,7 @@ int main(){
     input = NonCircularOrbitMoon<double>(x_deviation, y_deviation,
                                  phase_distro(engine),
                                  0.0, 0.0, true, 5.683e+26,
-                                 pow(mass_distro(engine), 2),
+                                 pow(mass_distro(engine) * 10000, 2),
                                  ring_radius + disc_radius_distro(engine));
     my_sim.SetParticle(input.particle, input.m);
   }
